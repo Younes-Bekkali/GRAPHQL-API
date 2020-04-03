@@ -1,34 +1,19 @@
-var express = require('express');
-var express_graphql = require('express-graphql');
-var {buildSchema} = require('graphql');
-// const { GraphQLObjectType, GraphQLString, GraphQLList  } = graphql;
-// var query = require('./sql.js');
+const express = require('express')
+const graphqlHTTP = require('express-graphql')
+const graphql = require('graphql')
+// translates the users GraphQL queries to SQL statements 
+const joinMonster = require('join-monster')
+// Simple SQL escape and format for MySQL
+// var SqlString = require('sqlstring')
 
-const { Client } = require('pg');
+// postgresql connection
+const { Client } = require('pg')
 const client = new Client({
-user: 'codeboxx',
-host: 'codeboxx-postgresql.cq6zrczewpu2.us-east-1.rds.amazonaws.com',
-database: 'ukemeekpenyong',
-password: 'Codeboxx1!',
-}); var mysql = require('mysql');
-const con = mysql.createConnection({
-host: 'codeboxx.cq6zrczewpu2.us-east-1.rds.amazonaws.com',
-user: "codeboxx",
-password: "Codeboxx1!",
-database: "JackieLai"
-});
-
-/*
-const { Client }  = require('pg');
-const client = new Client({
-    user: '',
-    host: 'localhost',
-    database: '',
-    password: '',
-    port: 5432
-});
-*/
-
+  host: "",
+  user: "",
+  password: "",
+  database: ""
+})
 client.connect(function(error){
     if (!!error) {
         console.log("Unable to connect to PSQL database.")
@@ -37,237 +22,232 @@ client.connect(function(error){
     }
 });
 
-/*var mysql = require('mysql');
+// mysql connection
+var mysql = require('mysql')
 const con = mysql.createConnection({
-  host: "localhost",
-  user: "root",
+  host: "",
+  user: "",
   password: "",
-  database: "JackieLai"
+  database: ""
 });
-*/
+
 con.connect(function(error){
     if (!!error) {
-        console.log("Unable to connect to mySQL database.");
+        console.log("Unable to connect to mySQL database.")
     } else {
-        console.log("You are connected to mySQL database.");
+        console.log("You are connected to mySQL database.")
     }
 });
 
-// GraphQL Schema
-// type Query is special schema root type, this is the entry point for the client request.
-// address: Address! belongs to one address
-// customer: Customer! belongs to one customer
-// interventions: [Intervention] belongs to many intervention
+// create the schema
+// const QueryRoot defines all the fields can be queried at the first level
+const QueryRoot = new graphql.GraphQLObjectType({
+    name: 'Query',
+    fields: () => ({
+        hello: {
+            type: graphql.GraphQLString,
+            resolve: () => "Hello world!"
+        },
 
-var schema = buildSchema(`
-    type Query {
-        fact_intervention(building_id: Int!): Intervention
-        buildings(id: Int!): buildings
-        customers(id: Int!): Customer
-        employees(id: Int!): Employee
-        building_details(id: Int!): building_details
-    }
-    type Intervention {
-        building_id: Int!
-        start_date_time: String!
-        end_date_time: String
-        buildings: [buildings]
-    }
-    type buildings {
-        id: Int!
-        admin_full_name: String
-        address_id: [Address]
-        customer_id: [Customer]
-        interventions: [Intervention]
-        building_details: building_details
-        
-    }
-    
-    type Address {
-        entity: Int!
-        type_of_address: String
-        status: String
-        number_n_street: String
-        street_name: String
-        suite_or_apt: String
-        city: String
-        postal_code: String
-        country: String
-        address_notes: String
-    }
-    type Customer {
-        id: Int!
-        company_name: String
-        name_company_contact: String
-        buildings: [buildings]
-    }
-    type Employee {
-        id: Int!
-        first_name: String
-        last_name: String
-        email: String
-        buildings: [buildings]
-        intervention: [Intervention]
-    }
-    type building_details {
-        id: Int!
-        building_id: Int!
-        info_key: String
-        value: String
-    }
-`);
-
-// Root Resolver, list of the queries and assign the function which is executed
-var root = {
-    factinterventions: getInterventions,
-    buildings: getBuildings,
-    customers: getCustomers,
-    employees: getEmployees,
-    building_details: getBuildingDetails,
-    addresses: getAddress,
-};
-
-async function getAddress({ id }) {
-    const res1 = await querypg('SELECT * FROM fact_intervention where id = ' + id + ';');
-    const rest2 = await query('SELECT * FROM addresses JOIN buildings ON buildings.address_id = addresses.id WHERE buildings.id = ' + res1['rows'][0].building_id);
-
-    const intervention = res1.rows[0];
-
-    intervention['address'] = rest2[0]
-    return intervention;
-
-};
-
-async function getInterventions({building_id}) {
-    var interventions = await query('SELECT * FROM factinterventions WHERE building_id = ' +building_id )
-    return interventions[0]
-};
-
-async function getBuildings({id}) {
-    var buildings = await query('SELECT * FROM buildings WHERE id = ' +id )
-    return buildings[0]
-};
-
-async function getCustomers({ id }) {
-    const res1 = await querypg('SELECT * FROM fact_intervention where building_id = ' + id);
-    const res2 = await query('SELECT buildings.id, buildings.building_name, customers.name_company_contact, customers.company_name, customers.company_phone, customers.contact_email FROM buildings INNER JOIN customers ON buildings.customer_id = customers.id WHERE buildings.id = ' + id)
-    const res3 = await query('SELECT * FROM buildings where id =' + id);
-    //Extract informations from response object
-    const interventions = res1.rows;
-    const customer = res2[0];
-    const building = res3[0];
-
-
-    // //Add address values to Address type of Intervention
-    building['customer'] = customer;
-    building['interventions'] = interventions;
-    return building;
-};
-
-async function getCustomers({id}) {
-    var customers = await query('SELECT * FROM customers WHERE id = ' +id )
-    return customers[0]
-};
-
-
-async function getEmployees({ id }) {
-    const res1 = await query('SELECT * FROM employees WHERE id = ' + id)
-    const res2 = await querypg('SELECT * FROM fact_intervention WHERE employee_id = ' + id)
-
-   
-    var buildingIDList = []
-
-    //Get list of buildings ID
-    res2.rows.forEach(function (building) {
-        buildingIDList.push(building.building_id)
-    })    
-
-    
-    //Filters buildingIDList to get unique value
-    var filteredBuildingList = buildingIDList.filter(onlyUnique);
-   
-
-    //Change building list into string for SQL
-    StringedBuildings = filteredBuildingList.join();    
-
-    //Get required buildings infos
-    buildings = await query('SELECT * FROM buildings WHERE id IN (' + StringedBuildings + ')')
-
-    //Get building details
-    building_details = await query('SELECT * FROM building_details WHERE building_id IN (' + StringedBuildings + ')')
-    
-
-    //Extract informations from response object
-    const employee = res1[0];
-    
-    employee['interventions'] = res2.rows;
-    employee['building'] = buildings;
-    employee['building_details'] = building_details;   
-
-    return employee;
-};
-
-async function getEmployees({id}) {
-    var employees = await query('SELECT * FROM employees WHERE id = ' +id )
-    return employees[0]
-};
-
-async function getBuildingDetails({id}) {
-    var buildingdetails = await query('SELECT * FROM building_details WHERE id = ' +id )
-    return buildingdetails[0]
-};
-
-// define what is query
-function query(queryString) {
-    console.log(queryString)
-    return new Promise((resolve, reject) => {
-        con.query(queryString, function(err, result) {
-            if (err) {
-                return reject(err);
-            } 
-            return resolve(result)
-        })
-    })
-};
-
-// async function getInterventions() {
-//     console.log("Sending Query...")
-//     var factintervention = await querypg('SELECT * FROM factintervention WHERE employee_id = 341')
-//     // for (var i = 0; i < rows.length; i++) {
-//     //     var row = rows[i];
-//     //     console.log(row.status);
-//     // }
-//     console.log("============== RETURNING OBJECT ===================")
-//     console.log(factintervention.rows)
-//     console.log("============== RETURNING FIELDS ===================")
-//     console.log("")
-//     console.log("===================================================")
-//     return factintervention
-// };
-
-function querypg(queryString) {
-    console.log("Hi! - PostGres -")
-    console.log(queryString)
-    return new Promise((resolve, reject) => {
-        client.query(queryString, function(err, result) {
-            if (err) {
-                console.log("error!", err)
-                return reject(err);
+        interventions: {
+            type: new graphql.GraphQLList(Intervention),
+            resolve: (parent, args, context, resolveInfo) => {
+              return joinMonster.default(resolveInfo, {}, sql => {
+                return client.query(sql)
+              })
             }
-            console.log("result!", result)
-            return resolve(result)
-        })
+        },
+
+        intervention: {
+            type: Intervention,
+            args: { id: { type: graphql.GraphQLNonNull(graphql.GraphQLInt) } },
+            where: (factinterventionTable, args, context) => `${factinterventionTable}.building_id = ${args.id}`,
+            resolve: (parent, args, context, resolveInfo) => {
+            return joinMonster.default(resolveInfo, {}, sql => {
+                return client.query(sql)
+                })
+            }
+        },
+
+
+        buildings: {
+            type: new graphql.GraphQLList(Building),
+            resolve: (parent, args, context, resolveInfo) => {
+              return joinMonster.default(resolveInfo, {}, sql => {
+                return con.query(sql)
+                })
+            }
+        },
+
+        building: {
+            type: Building,
+            args: { id: { type: graphql.GraphQLNonNull(graphql.GraphQLInt) } },
+            where: (buildingsTable, args, context) => `${buildingsTable}.id = ${args.id}`,
+            resolve: (parent, args, context, resolveInfo) => {
+            return joinMonster.default(resolveInfo, {}, sql => {
+                console.log(sql)
+                return con.query(sql)
+                })
+            }
+        },
+
+        employees: {
+            type: new graphql.GraphQLList(Employee),
+            resolve: (parent, args, context, resolveInfo) => {
+              return joinMonster.default(resolveInfo, {}, sql => {
+                return con.query(sql)
+              })
+            }
+        },
+
+        employee: {
+            type: Employee,
+            args: { id: { type: graphql.GraphQLNonNull(graphql.GraphQLInt) } },
+            where: (employeesTable, args, context) => `${employeesTable}.id = ${args.id}`,
+            resolve: (parent, args, context, resolveInfo) => {
+            return joinMonster.default(resolveInfo, {}, sql => {
+                return con.query(sql)
+                })
+            }
+        },
     })
-};
+
+
+  })
+
+// DEFINE THE NEW TYPES: Intervention, Building, Address, Customer, Employee, Building_detail
+    const Intervention = new graphql.GraphQLObjectType({
+        name: 'Intervention',
+        fields: () => ({
+        building_id: { type: graphql.GraphQLInt },
+        start_date_time_intervention: { type: graphql.GraphQLString },
+        end_date_time_intervention: { type: graphql.GraphQLString },
+        buildings: {
+            type: Building,
+            sqlJoin: (factinterventionTable, buildingsTable, args) => `${factinterventionTable}.building_id = ${buildingsTable}.id`
+        }
+        })
+    });
+
+    //specified the name of the table as well as the unique id of the rows inside the type's configuration object, _typeConfig. 
+    //that way, Join Monster will know how to construct a proper SQL statement for your table.
+    Intervention._typeConfig = {
+        sqlTable: 'factintervention', // the SQL table for this object type is called "factintervention"
+        uniqueKey: 'building_id', // id is different for every row
+    }
+
+    const Building = new graphql.GraphQLObjectType({
+        name: 'Building',
+        fields: () => ({
+          id: { type: graphql.GraphQLInt },
+          address: {
+            type: Address,
+            sqlJoin: (buildingsTable, addressesTable, args) => `${buildingsTable}.id = ${addressesTable}.entity_id`
+          },
+          customer: {
+            type: Customer,
+            sqlJoin: (buildingsTable, customersTable, args) => `${buildingsTable}.id = ${customersTable}.building_id`
+          },
+          building_detail: {
+              type: Building_detail,
+              sqlJoin: (buildingsTable, building_detailsTable, args) => `${buildingsTable}.id = ${building_detailsTable}.building_id`
+          }
+        })
+      });
+    
+        //specified the name of the table as well as the unique id of the rows inside the type's configuration object, _typeConfig. 
+        //that way, Join Monster will know how to construct a proper SQL statement for your table.
+        Building._typeConfig = {
+            sqlTable: 'building',
+            uniqueKey: 'id',
+        }
+
+        const Address = new graphql.GraphQLObjectType({
+            name: 'Address',
+            fields: () => ({
+              entity_id: { type: graphql.GraphQLInt },
+              street_number: { type: graphql.GraphQLString },
+              street_name: { type: graphql.GraphQLString },
+              suite_or_apartment: { type: graphql.GraphQLString },
+              city: { type: graphql.GraphQLString },
+              postal_code: { type: graphql.GraphQLString },
+              country: { type: graphql.GraphQLString },    
+            //   building: {
+            //     type: Building,
+            //     sqlJoin: (addressesTable, buildingsTable, args) => `${addressesTable}.entity_id = ${buildingsTable}.id`
+            //   }
+            })
+          });
+        
+            //specified the name of the table as well as the unique id of the rows inside the type's configuration object, _typeConfig. 
+            //that way, Join Monster will know how to construct a proper SQL statement for your table.
+            Address._typeConfig = {
+                sqlTable: 'addresses',
+                uniqueKey: 'entity_id',
+            }
+
+            const Customer = new graphql.GraphQLObjectType({
+                name: 'Customer',
+                fields: () => ({
+                  id: { type: graphql.GraphQLInt },
+                  building_id: { type: graphql.GraphQLInt },
+                  company_name: { type: graphql.GraphQLString },
+                  company_contact_full_name: { type: graphql.GraphQLString },
+                 })
+            });
+            //specified the name of the table as well as the unique id of the rows inside the type's configuration object, _typeConfig. 
+            //that way, Join Monster will know how to construct a proper SQL statement for your table.
+            Customer._typeConfig = {
+                sqlTable: 'customers',
+                uniqueKey: 'buiolding_id',
+            }
+
+            const Building_detail = new graphql.GraphQLObjectType({
+                name: 'Building_detail',
+                fields: () => ({
+                  building_id: { type: graphql.GraphQLInt },
+                  information_key: { type: graphql.GraphQLString },
+                  value: { type: graphql.GraphQLString },
+                 })
+            });
+            //specified the name of the table as well as the unique id of the rows inside the type's configuration object, _typeConfig. 
+            //that way, Join Monster will know how to construct a proper SQL statement for your table.
+            Building_detail._typeConfig = {
+                sqlTable: 'building_details',
+                uniqueKey: 'building_id',
+            }
+
+            const Employee = new graphql.GraphQLObjectType({
+                name: 'Employee',
+                fields: () => ({
+                    id: { type: graphql.GraphQLInt },
+                    firstname: { type: graphql.GraphQLString },
+                    lastname: { type: graphql.GraphQLString },
+                    intervention: {
+                        type: Intervention,
+                        sqlJoin: (employeesTable, factinterventionTable, args) => `${employeesTable}.id = ${factinterventionTable}.employee_id`
+                    }
+                 })
+            });
+            //specified the name of the table as well as the unique id of the rows inside the type's configuration object, _typeConfig. 
+            //that way, Join Monster will know how to construct a proper SQL statement for your table.
+            Employee._typeConfig = {
+                sqlTable: 'employees',
+                uniqueKey: 'id',
+            }
 
 
 
+                  
+const schema = new graphql.GraphQLSchema({ 
+    query: QueryRoot 
+});
 
 // Create an express server and a GraphQL endpoint
 var app = express();
-app.use('/graphql', express_graphql({
+app.use('/graphql', graphqlHTTP({
     schema: schema,
-    rootValue: root,
+    rootValue: global,
     graphiql: true
 }));
 
