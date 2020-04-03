@@ -230,20 +230,7 @@ function query(queryString) {
     })
 };
 
-// async function getInterventions() {
-//     console.log("Sending Query...")
-//     var factintervention = await querypg('SELECT * FROM factintervention WHERE employee_id = 341')
-//     // for (var i = 0; i < rows.length; i++) {
-//     //     var row = rows[i];
-//     //     console.log(row.status);
-//     // }
-//     console.log("============== RETURNING OBJECT ===================")
-//     console.log(factintervention.rows)
-//     console.log("============== RETURNING FIELDS ===================")
-//     console.log("")
-//     console.log("===================================================")
-//     return factintervention
-// };
+
 
 function querypg(queryString) {
     console.log("Hi! - PostGres -")
